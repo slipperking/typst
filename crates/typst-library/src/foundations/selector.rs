@@ -115,16 +115,18 @@ impl Selector {
 
         let mut pieces = path.rsplit('/');
         let target = pieces.next().unwrap();
-        let mut selector = Self::Label(Label::new(PicoStr::intern(target)).unwrap());
-        for ancestor in pieces {
-            selector = Self::Within {
+        let ancestor = pieces
+            .map(|piece| Self::Label(Label::new(PicoStr::intern(piece)).unwrap()))
+            .reduce(|selector, ancestor| Self::Within {
                 selector: Arc::new(selector),
-                ancestor: Arc::new(Self::Label(
-                    Label::new(PicoStr::intern(ancestor)).unwrap(),
-                )),
-            };
+                ancestor: Arc::new(ancestor),
+            })
+            .unwrap();
+
+        Self::Within {
+            selector: Arc::new(Self::Label(Label::new(PicoStr::intern(target)).unwrap())),
+            ancestor: Arc::new(ancestor),
         }
-        selector
     }
 
     /// Define a simple text selector.

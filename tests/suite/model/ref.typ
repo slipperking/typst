@@ -44,6 +44,7 @@ As seen in @intro, we proceed.
 
   #context test(str(<doc-1>/<subscope-1>), "doc-1/subscope-1")
   #context test(query(<doc-1/subscope-1/subheading>).len(), 1)
+  #context test(query(<subscope-1/doc-1/subheading>).len(), 0)
 ]
 
 --- ref-within-label-path-ambiguous bundle ---
