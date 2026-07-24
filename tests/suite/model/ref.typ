@@ -69,6 +69,38 @@ As seen in @intro, we proceed.
   @scope/subheading
 ]
 
+--- ref-within-label-path-repeat bundle ---
+#set heading(numbering: "1.")
+#set math.equation(numbering: "(1)")
+
+#let ct = [
+  $ E = m c^2 $ <eq1>
+  $ F = m a $ <eq2>
+  #[= #lorem(2) <head>] <scope1>
+  #[= #lorem(2) <head>] <scope2>
+  - See @eq1, @eq2, @scope1/head, @scope2/head
+  - Also look at @doc-a/eq1 and @doc-b/eq1.
+]
+
+#let prefix-reference(it, prefix: "") = if not str(it.target).contains("doc-") {
+  ref(label(prefix + "/" + str(it.target)))
+} else {
+  it
+}
+
+#document("a.pdf")[
+  #show ref: prefix-reference.with(prefix: "doc-a")
+  #ct
+] <doc-a>
+
+#counter(heading).update(0)
+#counter(math.equation).update(0)
+
+#document("b.pdf")[
+  #show ref: prefix-reference.with(prefix: "doc-b")
+  #ct
+] <doc-b>
+
 --- ref-label-contains-paths eval ---
 // Error: 11-27 label paths cannot be used to label content
 = Heading <heading/syntax>
