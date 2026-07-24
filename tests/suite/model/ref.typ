@@ -20,6 +20,59 @@ As seen in @intro, we proceed.
 // Error: 1-5 label `<foo>` occurs multiple times in the document
 @foo
 
+--- ref-within-label-path bundle ---
+#set heading(numbering: "1.")
+
+#[
+  #document("alpha.pdf")[
+    = #lorem(3) <heading-1>
+    #[
+      == #lorem(5) <subheading>
+    ] <subscope-1>
+  ] <doc-1>
+  #document("beta.pdf")[
+    = #lorem(4) <subheading>
+  ] <doc-2>
+] <scope>
+
+#document("gamma.pdf")[
+  @doc-1/subheading
+  @subscope-1/subheading
+  @doc-1/subscope-1/subheading
+  #ref(<doc-1/subscope-1/subheading>)
+  #ref(<doc-1>/<subscope-1>/<subheading>)
+
+  #context test(str(<doc-1>/<subscope-1>), "doc-1/subscope-1")
+  #context test(query(<doc-1/subscope-1/subheading>).len(), 1)
+]
+
+--- ref-within-label-path-ambiguous bundle ---
+#set heading(numbering: "1.")
+
+#[
+  #document("alpha.pdf")[
+    = #lorem(3) <heading-1>
+    #[
+      == #lorem(5) <subheading>
+    ] <subscope-1>
+  ] <doc-1>
+  #document("beta.pdf")[
+    = #lorem(4) <subheading>
+  ] <doc-2>
+] <scope>
+
+#document("gamma.pdf")[
+  // Error: 3-14 label `<subheading>` occurs multiple times in the document
+  @subheading
+
+  // Error: 3-20 selector matches multiple elements
+  @scope/subheading
+]
+
+--- ref-label-contains-paths eval ---
+// Error: 11-27 label paths cannot be used to label content
+= Heading <heading/syntax>
+
 --- ref-supplements paged ---
 #set heading(numbering: "1.", supplement: [Chapter])
 #set math.equation(numbering: "(1)", supplement: [Eq.])
