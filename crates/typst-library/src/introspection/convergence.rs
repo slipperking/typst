@@ -13,9 +13,14 @@ use crate::diag::{SourceDiagnostic, warning};
 use crate::engine::{Engine, Route, Sink, Traced};
 use crate::introspection::Introspector;
 
-pub const MAX_ITERS: usize = 5;
-pub const ITER_NAMES: &[&str] =
-    &["iter (1)", "iter (2)", "iter (3)", "iter (4)", "iter (5)"];
+pub const MAX_ITERS: usize = 25;
+use std::sync::LazyLock;
+
+pub static ITER_NAMES: LazyLock<[&'static str; 25]> = LazyLock::new(|| {
+    std::array::from_fn(|i| {
+        Box::leak(format!("iter ({})", i + 1).into_boxed_str()) as &'static str
+    })
+});
 
 const INSTANCES: usize = MAX_ITERS + 1;
 
