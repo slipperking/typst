@@ -40,6 +40,7 @@ ffa25d90e2baac1e02b03a60cae89720 block-html-block
 252cb984e3a921ac9d717570371f4fa6 cite-group
 e87734ba4dba7fed32967be69484478c col-gutter-table
 e87734ba4dba7fed32967be69484478c col-row-gutter-table
+3453d4c39c6c93ebdae49e18a6dfb6f3 convergence-html-id
 c3adb00220cf56685a91e1bd4d93f3b4 divider-html
 51bc0feb18dfc54b51463fa6374d9a21 document-multiple-authors-html
 ec72df663ab6b4fe6aedaec1ab3f2165 document-multiple-keywords-html

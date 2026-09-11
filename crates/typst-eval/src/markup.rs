@@ -204,7 +204,7 @@ impl Eval for ast::Ref<'_> {
     fn eval(self, vm: &mut Vm) -> SourceResult<Self::Output> {
         let target = Label::new(PicoStr::intern(self.target()))
             .expect("unexpected empty reference");
-        let mut elem = RefElem::new(target);
+        let mut elem = RefElem::new(target.into());
         if let Some(supplement) = self.supplement() {
             elem.supplement
                 .set(Smart::Custom(Some(Supplement::Content(supplement.eval(vm)?))));

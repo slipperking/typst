@@ -90,6 +90,10 @@ impl Introspector for BundleIntrospector {
         self.elements.query_unique(selector)
     }
 
+    fn query_nearest(&self, selector: &Selector, base: Location) -> EcoVec<Content> {
+        self.elements.query_nearest(selector, base)
+    }
+
     fn query_label(&self, label: Label) -> StrResult<Content> {
         self.elements.query_label(label)
     }

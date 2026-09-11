@@ -7,11 +7,12 @@ use typst_utils::{NonZeroExt, singleton};
 use crate::diag::{At, SourceResult, StrResult, bail};
 use crate::engine::Engine;
 use crate::foundations::{
-    Content, Label, NativeElement, Packed, ShowSet, Smart, StyleChain, Styles, cast,
-    elem, scope,
+    Content, Label, NativeElement, Packed, Selector, ShowSet, Smart, StyleChain, Styles,
+    cast, elem, scope,
 };
 use crate::introspection::{
-    Count, Counter, CounterUpdate, Location, QueryLabelIntrospection,
+    Count, Counter, CounterUpdate, Location, QueryFirstIntrospection,
+    QueryLabelIntrospection,
 };
 use crate::layout::{Em, Length, Ratio};
 use crate::model::{DirectLinkElem, Numbering, NumberingPattern, ParElem};
@@ -120,16 +121,25 @@ impl FootnoteElem {
         }
     }
 
+    /// Creates a new footnote referencing the footnote at a location, with the
+    /// other fields from the current footnote cloned.
+    pub fn into_ref_at(&self, location: Location) -> Self {
+        Self {
+            body: FootnoteBody::Location(location),
+            ..self.clone()
+        }
+    }
+
     /// Tests if this footnote is a reference to another footnote.
     pub fn is_ref(&self) -> bool {
-        matches!(self.body, FootnoteBody::Reference(_))
+        matches!(self.body, FootnoteBody::Reference(_) | FootnoteBody::Location(_))
     }
 
     /// Returns the content of the body of this footnote if it is not a ref.
     pub fn body_content(&self) -> Option<&Content> {
         match &self.body {
             FootnoteBody::Content(content) => Some(content),
-            FootnoteBody::Reference(_) => None,
+            FootnoteBody::Reference(_) | FootnoteBody::Location(_) => None,
         }
     }
 }
@@ -166,6 +176,21 @@ impl Packed<FootnoteElem> {
                 }
                 footnote.declaration_location(engine)
             }
+            FootnoteBody::Location(location) => {
+                let element = engine
+                    .introspect(QueryFirstIntrospection(
+                        Selector::Location(location),
+                        self.span(),
+                    ))
+                    .ok_or("referenced element should be a footnote")?;
+                let footnote = element
+                    .to_packed::<FootnoteElem>()
+                    .ok_or("referenced element should be a footnote")?;
+                if self.location() == footnote.location() {
+                    bail!("footnote cannot reference itself");
+                }
+                footnote.declaration_location(engine)
+            }
             FootnoteBody::Content(_) => Ok(self.location().unwrap()),
         }
     }
@@ -183,6 +208,7 @@ impl Count for Packed<FootnoteElem> {
 pub enum FootnoteBody {
     Content(Content),
     Reference(Label),
+    Location(Location),
 }
 
 cast! {
@@ -190,6 +216,7 @@ cast! {
     self => match self {
         Self::Content(v) => v.into_value(),
         Self::Reference(v) => v.into_value(),
+        Self::Location(v) => v.into_value(),
     },
     v: Content => Self::Content(v),
     v: Label => Self::Reference(v),

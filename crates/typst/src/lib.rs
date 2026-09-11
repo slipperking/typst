@@ -53,9 +53,7 @@ use typst_library::format::Format;
 use typst_library::foundations::{
     NativeRuleMap, Output, StyleChain, Styles, Target, TargetElem, Value,
 };
-use typst_library::introspection::{
-    EmptyIntrospector, ITER_NAMES, Introspector, MAX_ITERS,
-};
+use typst_library::introspection::{EmptyIntrospector, Introspector, MAX_ITERS};
 use typst_library::routines::Routines;
 use typst_syntax::{FileId, Span};
 use typst_timing::{TimingScope, timed};
@@ -135,9 +133,9 @@ fn compile_impl<T: Output>(
     let mut document: T;
 
     // Relayout until all introspections stabilize.
-    // If that doesn't happen within five attempts, we give up.
+    // If that doesn't happen within 25 attempts, we give up.
     loop {
-        let _scope = TimingScope::new(ITER_NAMES[history.len()]);
+        let _scope = TimingScope::new("iter");
         let introspector = history
             .last()
             .map(|doc| doc.introspector())

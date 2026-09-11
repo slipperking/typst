@@ -20,6 +20,63 @@ As seen in @intro, we proceed.
 // Error: 1-5 label `<foo>` occurs multiple times in the document
 @foo
 
+--- ref-selector-target paged empty ---
+#set heading(numbering: "1.")
+#show heading: none
+#show ref: it => {
+  test(it.element.func(), heading)
+  test(it.element.level, 2)
+}
+
+= Section
+== Subsection
+
+#ref(heading.where(level: 2))
+
+--- ref-parent-scope-ambiguous paged ---
+#set math.equation(numbering: "(1)")
+
+#[
+  $ E = m c^2 $ <result>
+]
+
+#[
+  $ F = m a $ <result>
+] <result>
+
+// Error: 1-8 label `<result>` occurs multiple times in the document
+@result
+
+--- ref-parent-scope-nearest paged empty ---
+#set math.equation(numbering: "(1)")
+#show math.equation: none
+#show ref: it => context {
+  let local = query(selector(math.equation).within(<result>)).first()
+  test(it.element.location(), local.location())
+}
+
+#[
+  $ E = m c^2 $ <result>
+]
+
+#[
+  $ F = m a $ <result>
+  @result
+  #ref(math.equation)
+] <result>
+
+--- ref-parent-scope-bundle bundle ---
+#let chapter(name, equation) = [
+  #show math.equation: none
+  #show ref: it => test(it.element.supplement, name)
+
+  #math.equation(equation, block: true, supplement: name) <result>
+  @result
+]
+
+#document("first.pdf", chapter([First], $ E = m c^2 $))
+#document("second.pdf", chapter([Second], $ F = m a $))
+
 --- ref-within-label-path bundle ---
 #set heading(numbering: "1.")
 

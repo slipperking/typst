@@ -36,6 +36,9 @@ pub trait Introspector: Send + Sync {
     /// Queries for the first element that matches the selector.
     fn query_unique(&self, selector: &Selector) -> StrResult<Content>;
 
+    /// Queries for matches in the parent scope nearest to `base`.
+    fn query_nearest(&self, selector: &Selector, base: Location) -> EcoVec<Content>;
+
     /// Queries for a unique element with the label or label path.
     fn query_label(&self, label: Label) -> StrResult<Content>;
 
@@ -108,6 +111,10 @@ impl Introspector for EmptyIntrospector {
 
     fn query_unique(&self, _: &Selector) -> StrResult<Content> {
         bail!("selector does not match any element");
+    }
+
+    fn query_nearest(&self, _: &Selector, _: Location) -> EcoVec<Content> {
+        EcoVec::new()
     }
 
     fn query_label(&self, label: Label) -> StrResult<Content> {
@@ -373,6 +380,57 @@ impl<P> ElementIntrospector<P> {
                     .ok_or_else(|| "selector does not match any element".into())
             }
         }
+    }
+
+    /// Queries for matches in the parent scope nearest to `base`.
+    pub fn query_nearest(&self, selector: &Selector, base: Location) -> EcoVec<Content> {
+        let matches = self.query(selector);
+        if matches.len() <= 1 {
+            return matches;
+        }
+
+        let base_range = self.loc_range(&base);
+        let base = base_range.start;
+        if base == usize::MAX {
+            return matches;
+        }
+
+        let base_ancestors: Vec<_> = self
+            .locations
+            .values()
+            .filter(|range| {
+                range.start != base
+                    && range.start <= base_range.start
+                    && range.end >= base_range.end
+            })
+            .collect();
+        let mut nearest = EcoVec::new();
+        let mut nearest_depth = 0;
+
+        for candidate in matches {
+            let index = self.elem_index(&candidate);
+            let candidate_range = self.loc_range(&candidate.location().unwrap());
+            let depth = base_ancestors
+                .iter()
+                .filter(|range| {
+                    range.start != index
+                        && range.start <= candidate_range.start
+                        && range.end >= candidate_range.end
+                })
+                .count();
+
+            match depth.cmp(&nearest_depth) {
+                std::cmp::Ordering::Greater => {
+                    nearest.clear();
+                    nearest.push(candidate);
+                    nearest_depth = depth;
+                }
+                std::cmp::Ordering::Equal => nearest.push(candidate),
+                std::cmp::Ordering::Less => {}
+            }
+        }
+
+        nearest
     }
 
     /// Queries for a unique element with the label or label path.

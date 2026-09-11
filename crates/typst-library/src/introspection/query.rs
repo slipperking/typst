@@ -8,7 +8,7 @@ use crate::engine::Engine;
 use crate::foundations::{
     Array, Content, Context, Label, LocatableSelector, Repr, Selector, Value, func,
 };
-use crate::introspection::Introspector;
+use crate::introspection::{Introspector, Location};
 
 /// Finds elements in the document.
 ///
@@ -202,6 +202,26 @@ impl Introspect for QueryIntrospection {
     }
 }
 
+/// Retrieves matches of a selector in the parent scope nearest to a location.
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub struct QueryNearestIntrospection(pub Selector, pub Location, pub Span);
+
+impl Introspect for QueryNearestIntrospection {
+    type Output = EcoVec<Content>;
+
+    fn introspect(
+        &self,
+        _: &mut Engine,
+        introspector: Tracked<dyn Introspector + '_>,
+    ) -> Self::Output {
+        introspector.query_nearest(&self.0, self.1)
+    }
+
+    fn diagnose(&self, history: &History<Self::Output>) -> SourceDiagnostic {
+        QueryIntrospection(self.0.clone(), self.2).diagnose(history)
+    }
+}
+
 /// Retrieves the first match of a selector in the document.
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct QueryFirstIntrospection(pub Selector, pub Span);
@@ -272,7 +292,7 @@ impl Introspect for QueryLabelIntrospection {
     }
 }
 
-/// The warning when an introspection on a [`Location`](super::Location) did not
+/// The warning when an introspection on a [`Location`] did not
 /// converge.
 fn format_convergence_warning(
     span: Span,

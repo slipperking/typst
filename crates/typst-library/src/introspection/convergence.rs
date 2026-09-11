@@ -14,13 +14,6 @@ use crate::engine::{Engine, Route, Sink, Traced};
 use crate::introspection::Introspector;
 
 pub const MAX_ITERS: usize = 25;
-use std::sync::LazyLock;
-
-pub static ITER_NAMES: LazyLock<[&'static str; 25]> = LazyLock::new(|| {
-    std::array::from_fn(|i| {
-        Box::leak(format!("iter ({})", i + 1).into_boxed_str()) as &'static str
-    })
-});
 
 const INSTANCES: usize = MAX_ITERS + 1;
 
@@ -62,7 +55,7 @@ pub fn analyze(
     if !diags.is_empty() {
         let summary = warning!(
             Span::detached(),
-            "document did not converge within five attempts";
+            "document did not converge within {MAX_ITERS} attempts";
             hint: "see {} additional warning{} for more details",
                 diags.len(),
                 if diags.len() > 1 { "s" } else { "" };

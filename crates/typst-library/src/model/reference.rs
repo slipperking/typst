@@ -4,12 +4,12 @@ use ecow::eco_format;
 use crate::diag::{At, Hint, SourceResult, bail};
 use crate::engine::Engine;
 use crate::foundations::{
-    Cast, Content, Context, Func, IntoValue, Label, NativeElement, Packed, Repr, Smart,
-    StyleChain, Synthesize, cast, elem,
+    Cast, Content, Context, Func, IntoValue, Label, LocatableSelector, NativeElement,
+    Packed, Repr, Selector, Smart, StyleChain, Synthesize, cast, elem,
 };
 use crate::introspection::{
     Counter, CounterKey, PageNumberingIntrospection, PageSupplementIntrospection,
-    QueryLabelIntrospection,
+    QueryIntrospection, QueryNearestIntrospection,
 };
 use crate::math::EquationElem;
 use crate::model::{
@@ -19,7 +19,8 @@ use crate::text::TextElem;
 
 /// A reference to a label or bibliography.
 ///
-/// Takes a label and cross-references it. There are two kind of references,
+/// Takes a selector and cross-references its nearest match. There are two kinds
+/// of references,
 /// determined by its @ref.form[`form`]: `{"normal"}` and `{"page"}`.
 ///
 /// The default, a `{"normal"}` reference, produces a textual reference to a
@@ -140,13 +141,17 @@ use crate::text::TextElem;
 /// ```
 #[elem(title = "Reference", since = "forever", Locatable, Tagged, Synthesize)]
 pub struct RefElem {
-    /// The target label that should be referenced.
+    /// The target that should be referenced.
     ///
-    /// Can be a label that is defined in the document or, if the
-    /// @ref.form[`form`] is set to `["normal"]`, an entry from the
-    /// @bibliography.
+    /// Can be any locatable selector. If a label is provided and the
+    /// @ref.form[`form`] is set to `["normal"]`, it can also select an entry
+    /// from the @bibliography.
+    ///
+    /// If the selector has multiple matches, the match in the parent scope
+    /// nearest to the reference is selected. An error is produced if multiple
+    /// matches remain in that scope.
     #[required]
-    pub target: Label,
+    pub target: RefTarget,
 
     /// A supplement for the reference.
     ///
@@ -208,15 +213,23 @@ impl Synthesize for Packed<RefElem> {
         styles: StyleChain,
     ) -> SourceResult<()> {
         let span = self.span();
-        let citation = to_citation(self, engine, styles)?;
+        let location = self.location();
+        let citation = self
+            .target
+            .label()
+            .map(|label| to_citation(self, label, engine, styles))
+            .transpose()?;
+        let found = resolve_target(&self.target, location, engine, span);
 
         let elem = self.as_mut();
-        elem.citation = Some(Some(citation));
+        elem.citation = Some(citation);
         elem.element = Some(None);
 
-        if !BibliographyElem::has(engine, elem.target, span)
-            && let Ok(found) =
-                engine.introspect(QueryLabelIntrospection(elem.target, span))
+        if !elem
+            .target
+            .label()
+            .is_some_and(|label| BibliographyElem::has(engine, label, span))
+            && let Ok(found) = found
         {
             elem.element = Some(Some(found));
             return Ok(());
@@ -234,7 +247,8 @@ impl Packed<RefElem> {
         styles: StyleChain,
     ) -> SourceResult<Content> {
         let span = self.span();
-        let elem = engine.introspect(QueryLabelIntrospection(self.target, span));
+        let location = self.location().unwrap();
+        let elem = resolve_target(&self.target, Some(location), engine, span);
 
         let form = self.form.get(styles);
         if form == RefForm::Page {
@@ -263,25 +277,30 @@ impl Packed<RefElem> {
         }
         // RefForm::Normal
 
-        if BibliographyElem::has(engine, self.target, span) {
+        if let Some(label) = self.target.label()
+            && BibliographyElem::has(engine, label, span)
+        {
             if let Ok(elem) = elem {
                 bail!(
                     span,
                     "label `{}` occurs both in the document and a bibliography",
-                    self.target.repr();
+                    label.repr();
                     hint: "change either the {}'s label or the \
                            bibliography key to resolve the ambiguity",
                     elem.func().name();
                 );
             }
 
-            return Ok(to_citation(self, engine, styles)?.pack().spanned(span));
+            return Ok(to_citation(self, label, engine, styles)?.pack().spanned(span));
         }
 
         let elem = elem.at(span)?;
 
         if let Some(footnote) = elem.to_packed::<FootnoteElem>() {
-            return Ok(footnote.into_ref(self.target).pack().spanned(span));
+            return Ok(footnote
+                .into_ref_at(elem.location().unwrap())
+                .pack()
+                .spanned(span));
         }
 
         let elem = elem.clone();
@@ -366,10 +385,11 @@ fn realize_reference(
 /// Turn a reference into a citation.
 fn to_citation(
     reference: &Packed<RefElem>,
+    label: Label,
     engine: &mut Engine,
     styles: StyleChain,
 ) -> SourceResult<Packed<CiteElem>> {
-    let mut elem = Packed::new(CiteElem::new(reference.target).with_supplement(
+    let mut elem = Packed::new(CiteElem::new(label).with_supplement(
         match reference.supplement.get_cloned(styles) {
             Smart::Custom(Some(Supplement::Content(content))) => Some(content),
             _ => None,
@@ -379,6 +399,79 @@ fn to_citation(
     elem.synthesize(engine, styles)?;
 
     Ok(elem)
+}
+
+/// Resolves a reference target relative to the reference's parent scope.
+fn resolve_target(
+    target: &RefTarget,
+    base: Option<crate::introspection::Location>,
+    engine: &mut Engine,
+    span: typst_syntax::Span,
+) -> crate::diag::StrResult<Content> {
+    let selector = target.selector();
+    let matches = match base {
+        Some(base) => engine.introspect(QueryNearestIntrospection(selector, base, span)),
+        None => engine.introspect(QueryIntrospection(selector, span)),
+    };
+
+    match matches.as_slice() {
+        [elem] => Ok(elem.clone()),
+        [] => match target.label() {
+            Some(label) => {
+                bail!("label `{}` does not exist in the document", label.repr())
+            }
+            None => bail!("selector does not match any element"),
+        },
+        _ => match target.label() {
+            Some(label) => {
+                bail!("label `{}` occurs multiple times in the document", label.repr())
+            }
+            None => bail!("selector matches multiple elements"),
+        },
+    }
+}
+
+/// A selector for the target of a reference.
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub enum RefTarget {
+    /// A label in the document or bibliography.
+    Label(Label),
+    /// A locatable selector in the document.
+    Selector(LocatableSelector),
+}
+
+impl RefTarget {
+    /// Returns the selector used to find a document element.
+    fn selector(&self) -> Selector {
+        match self {
+            Self::Label(label) => Selector::label_path(*label),
+            Self::Selector(selector) => selector.0.clone(),
+        }
+    }
+
+    /// Returns the label if this target was specified as one.
+    fn label(&self) -> Option<Label> {
+        match self {
+            Self::Label(label) => Some(*label),
+            Self::Selector(_) => None,
+        }
+    }
+}
+
+cast! {
+    RefTarget,
+    self => match self {
+        Self::Label(v) => v.into_value(),
+        Self::Selector(v) => v.into_value(),
+    },
+    label: Label => Self::Label(label),
+    selector: LocatableSelector => Self::Selector(selector),
+}
+
+impl From<Label> for RefTarget {
+    fn from(label: Label) -> Self {
+        Self::Label(label)
+    }
 }
 
 /// Additional content for a reference.
